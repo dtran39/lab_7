@@ -121,6 +121,8 @@ class ParticleFilter:
 
 DISTANCE = 30
 TURNING_ANGLE = 50
+region = "DOCKING"
+regionGoals = {"DOCKING": (8,8,0), "WAREHOUSE": (18,8,0)}
 async def run(robot: cozmo.robot.Robot):
     global last_pose
     global grid, gui
@@ -164,15 +166,8 @@ async def run(robot: cozmo.robot.Robot):
         m_x, m_y, m_h, m_confident = compute_mean_pose(pf.particles)
         #
         x, y, h, c = compute_mean_pose(pf.particles)
-
-        if x > 13:
-            isDockingRegion = False
-            goal = 19,9,0
-            print("warehouse region")
-        else:
-            isDockingRegion = True
-            goal = 9,9,0
-            print("docking region")
+        region = "DOCKING" if x <= 13 else "WAREHOUSE"
+        goal = regionGoals[region]
 
         y_diff = goal[1] * 0.95 - y
         x_diff = goal[0] * 0.95 - x
@@ -192,7 +187,7 @@ async def run(robot: cozmo.robot.Robot):
 
         goal_rot = -1 * tan
         await robot.turn_in_place(degrees(goal_rot)).wait_for_completed()
-        if isDockingRegion:
+        if region == "DOCKING":
             await robot.turn_in_place(degrees(145)).wait_for_completed()
         else:
             await robot.turn_in_place(degrees(180)).wait_for_completed()
@@ -224,7 +219,7 @@ async def run(robot: cozmo.robot.Robot):
             if cube:
                 await robot.pickup_object(cube, num_retries=3).wait_for_completed()
                 await robot.go_to_pose(previousPose).wait_for_completed()
-                if isDockingRegion:
+                if region == "DOCKING":
                     await robot.turn_in_place(degrees(-145)).wait_for_completed()
                     await robot.drive_straight(distance_mm(80), speed_mmps(40)).wait_for_completed()
                 else:
