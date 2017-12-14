@@ -11,7 +11,7 @@ import numpy
 def motion_update(particles, odom):
     """ Particle filter motion update
 
-        Arguments: 
+        Arguments:
         particles -- input list of particle represents belief p(x_{t-1} | u_{t-1})
                 before motion update
         odom -- noisy odometry measurement, a pair of robot pose, i.e. last time
@@ -56,7 +56,7 @@ def motion_update(particles, odom):
 def measurement_update(particles, measured_marker_list, grid):
     """ Particle filter measurement update
 
-        Arguments: 
+        Arguments:
         particles -- input list of particle represents belief \tilde{p}(x_{t} | u_{t})
                 before meansurement update
         measured_marker_list -- robot detected marker list, each marker has format:
@@ -64,7 +64,7 @@ def measurement_update(particles, measured_marker_list, grid):
                 rx -- marker's relative X coordinate in robot's frame
                 ry -- marker's relative Y coordinate in robot's frame
                 rh -- marker's relative heading in robot's frame, in degree
-        grid -- grid world map, which contains the marker information, 
+        grid -- grid world map, which contains the marker information,
                 see grid.h and CozGrid for definition
 
         Returns: the list of particle represents belief p(x_{t} | u_{t})
@@ -76,7 +76,7 @@ def measurement_update(particles, measured_marker_list, grid):
 
     if len(measured_marker_list) != 0:
         for particle in particles:
-            # Obtain list of localization markers 
+            # Obtain list of localization markers
             visibleMarkers = particle.read_markers(grid)
 
             shouldAppendParticle = particle.x >= grid.width or particle.x < 0 or particle.y >= grid.height or particle.y < 0 or (

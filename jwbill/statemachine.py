@@ -33,8 +33,3 @@ class StateMachine:
                     print("switching to ", newState, " from ", handler)
                 handler = self.states[newState].getName()
                 #print("Handler new ", handler)
-
-
-
-
-

@@ -46,10 +46,10 @@ async def image_processing(robot):
 
     # convert camera image to opencv format
     opencv_image = np.asarray(event.image)
-    
+
     # detect markers
     markers = detect_markers(opencv_image, marker_size, camK)
-    
+
     # show markers
     for marker in markers:
         marker.highlite_marker(opencv_image, draw_frame=True, camK=camK)
@@ -61,9 +61,9 @@ async def image_processing(robot):
 
 #calculate marker pose
 def cvt_2Dmarker_measurements(ar_markers):
-    
+
     marker2d_list = []
-    
+
     for m in ar_markers:
         R_1_2, J = cv2.Rodrigues(m.rvec)
         R_1_1p = np.matrix([[0,0,1], [0,-1,0], [1,0,0]])
@@ -71,10 +71,10 @@ def cvt_2Dmarker_measurements(ar_markers):
         R_2p_1p = np.matmul(np.matmul(inv(R_2_2p), inv(R_1_2)), R_1_1p)
         #print('\n', R_2p_1p)
         yaw = -math.atan2(R_2p_1p[2,0], R_2p_1p[0,0])
-        
+
         x, y = m.tvec[2][0] + 0.5, -m.tvec[0][0]
         # print('x =', x, 'y =', y,'theta =', yaw)
-        
+
         # remove any duplate markers
         dup_thresh = 2.0
         find_dup = False
@@ -131,6 +131,8 @@ async def run(robot: cozmo.robot.Robot):
     robot.camera.image_stream_enabled = True
 
     #start particle filter
+    await robot.set_head_angle(degrees(0)).wait_for_completed()
+    await robot.set_lift_height(0).wait_for_completed()
     pf = ParticleFilter(grid)
 
     ############################################################################
