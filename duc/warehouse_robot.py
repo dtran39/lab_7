@@ -119,7 +119,7 @@ class ParticleFilter:
         m_x, m_y, m_h, m_confident = compute_mean_pose(self.particles)
         return (m_x, m_y, m_h, m_confident)
 
-DISTANCE = 30
+DISTANCE = 50
 TURNING_ANGLE = 30
 async def run(robot: cozmo.robot.Robot):
     global last_pose
@@ -161,6 +161,85 @@ async def run(robot: cozmo.robot.Robot):
                 else:
                     await robot.turn_in_place(degrees(TURNING_ANGLE)).wait_for_completed()
         #
+        m_x, m_y, m_h, m_confident = compute_mean_pose(pf.particles)
+        #
+        x, y, h, c = compute_mean_pose(pf.particles)
+
+        if x > 13:
+            isDockingRegion = False
+            goal = 19,9,0
+            print("warehouse region")
+        else:
+            isDockingRegion = True
+            goal = 9,9,0
+            print("docking region")
+
+        y_diff = goal[1] * 0.95 - y
+        x_diff = goal[0] * 0.95 - x
+        tan = math.degrees(atan2(y_diff, x_diff))
+        rot = diff_heading_deg(tan, h)
+        await robot.turn_in_place(degrees(rot)).wait_for_completed()
+
+        #Move toward goal
+        dist_to_goal = math.sqrt(y_diff**2 + x_diff**2) * 25
+        dist = 0.0
+        while dist < dist_to_goal:
+            min_dist = min(30, dist_to_goal - dist)
+            dist_mm = distance_mm(min_dist)
+            await robot.drive_straight(dist_mm, speed_mmps(40)).wait_for_completed()
+            dist = dist + min_dist
+
+
+        goal_rot = -1 * tan
+        await robot.turn_in_place(degrees(goal_rot)).wait_for_completed()
+        if isDockingRegion:
+            await robot.turn_in_place(degrees(145)).wait_for_completed()
+        else:
+            await robot.turn_in_place(degrees(180)).wait_for_completed()
+
+        cube = None
+        try:
+            cube = await robot.world.wait_for_observed_light_cube(timeout=1)
+        except:
+            pass
+        timer = 1
+        numBoxesPlaced = 0
+        previousPose = robot.pose
+        while True:
+            if timer == 2:
+                await robot.turn_in_place(degrees(60)).wait_for_completed()
+                try:
+                    cube = await robot.world.wait_for_observed_light_cube(timeout=1)
+                except:
+                    pass
+                timer = 0
+            else:
+                await robot.turn_in_place(degrees(-30)).wait_for_completed()
+                try:
+                    cube = await robot.world.wait_for_observed_light_cube(timeout=1)
+                except:
+                    pass
+                timer += 1
+
+            if cube:
+                await robot.pickup_object(cube, num_retries=3).wait_for_completed()
+                await robot.go_to_pose(previousPose).wait_for_completed()
+                if isDockingRegion:
+                    await robot.turn_in_place(degrees(-145)).wait_for_completed()
+                    await robot.drive_straight(distance_mm(80), speed_mmps(40)).wait_for_completed()
+                else:
+                    if numBoxesPlaced == 0:
+                        await robot.turn_in_place(degrees(-125)).wait_for_completed()
+                        await robot.drive_straight(distance_mm(80), speed_mmps(40)).wait_for_completed()
+                    else:
+                        await robot.turn_in_place(degrees(-165)).wait_for_completed()
+                        await robot.drive_straight(distance_mm(40), speed_mmps(40)).wait_for_completed()
+
+                await robot.set_lift_height(0).wait_for_completed()
+                await robot.go_to_pose(previousPose).wait_for_completed()
+                cube = None
+                timer = 1
+                numBoxesPlaced += 1
 class CozmoThread(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self, daemon=False)
