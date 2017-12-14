@@ -120,9 +120,12 @@ class ParticleFilter:
         return (m_x, m_y, m_h, m_confident)
 
 DISTANCE = 30
-TURNING_ANGLE = 50
+TURNING_ANGLE = 30
 region = "DOCKING"
 regionGoals = {"DOCKING": (8,8,0), "WAREHOUSE": (18,8,0)}
+
+state = "LOCALIZE"
+
 async def run(robot: cozmo.robot.Robot):
     global last_pose
     global grid, gui
@@ -140,101 +143,59 @@ async def run(robot: cozmo.robot.Robot):
 
     ############################################################################
     while True:
-        direction = 1
-        m_confident = False
-        while m_confident == False:
-            curr_pose = robot.pose
-            odom = compute_odometry(curr_pose)
-            markers = await image_processing(robot)
-            marker2d_list = cvt_2Dmarker_measurements(markers)
-            m_x, m_y, m_h, m_confident = pf.update(odom, marker2d_list)
-            gui.show_particles(pf.particles)
-            gui.show_mean(m_x, m_y, m_h, m_confident)
-            gui.updated.set()
-            last_pose = curr_pose
-            #
-            if m_confident == False:
-                numMarkers = len(markers)
-                if direction == -1 or (numMarkers > 0 and marker2d_list[0][0] > 2.0):
-                    await robot.drive_straight(distance_mm(direction * DISTANCE), speed_mmps(DISTANCE)).wait_for_completed()
-                    direction *= -1
-                    if direction == 1:
-                        await robot.turn_in_place(degrees(TURNING_ANGLE)).wait_for_completed()
-                else:
-                    await robot.turn_in_place(degrees(TURNING_ANGLE)).wait_for_completed()
-        #
-        m_x, m_y, m_h, m_confident = compute_mean_pose(pf.particles)
-        #
-        x, y, h, c = compute_mean_pose(pf.particles)
-        region = "DOCKING" if x <= 13 else "WAREHOUSE"
-        goal = regionGoals[region]
-
-        y_diff = goal[1] * 0.95 - y
-        x_diff = goal[0] * 0.95 - x
-        tan = math.degrees(atan2(y_diff, x_diff))
-        rot = diff_heading_deg(tan, h)
-        await robot.turn_in_place(degrees(rot)).wait_for_completed()
-
-        #Move toward goal
-        dist_to_goal = math.sqrt(y_diff**2 + x_diff**2) * 25
-        dist = 0.0
-        while dist < dist_to_goal:
-            min_dist = min(30, dist_to_goal - dist)
-            dist_mm = distance_mm(min_dist)
-            await robot.drive_straight(dist_mm, speed_mmps(40)).wait_for_completed()
-            dist = dist + min_dist
-
-
-        goal_rot = -1 * tan
-        await robot.turn_in_place(degrees(goal_rot)).wait_for_completed()
-        if region == "DOCKING":
-            await robot.turn_in_place(degrees(145)).wait_for_completed()
-        else:
-            await robot.turn_in_place(degrees(180)).wait_for_completed()
-
-        cube = None
-        try:
-            cube = await robot.world.wait_for_observed_light_cube(timeout=1)
-        except:
-            pass
-        timer = 1
-        numBoxesPlaced = 0
-        previousPose = robot.pose
-        while True:
-            if timer == 2:
-                await robot.turn_in_place(degrees(60)).wait_for_completed()
-                try:
-                    cube = await robot.world.wait_for_observed_light_cube(timeout=1)
-                except:
-                    pass
-                timer = 0
-            else:
-                await robot.turn_in_place(degrees(-30)).wait_for_completed()
-                try:
-                    cube = await robot.world.wait_for_observed_light_cube(timeout=1)
-                except:
-                    pass
-                timer += 1
-
-            if cube:
-                await robot.pickup_object(cube, num_retries=3).wait_for_completed()
-                await robot.go_to_pose(previousPose).wait_for_completed()
-                if region == "DOCKING":
-                    await robot.turn_in_place(degrees(-145)).wait_for_completed()
-                    await robot.drive_straight(distance_mm(80), speed_mmps(40)).wait_for_completed()
-                else:
-                    if numBoxesPlaced == 0:
-                        await robot.turn_in_place(degrees(-125)).wait_for_completed()
-                        await robot.drive_straight(distance_mm(80), speed_mmps(40)).wait_for_completed()
+        if state == "LOCALIZE":
+            direction = 1
+            m_confident = False
+            while m_confident == False:
+                curr_pose = robot.pose
+                odom = compute_odometry(curr_pose)
+                markers = await image_processing(robot)
+                marker2d_list = cvt_2Dmarker_measurements(markers)
+                m_x, m_y, m_h, m_confident = pf.update(odom, marker2d_list)
+                gui.show_particles(pf.particles)
+                gui.show_mean(m_x, m_y, m_h, m_confident)
+                gui.updated.set()
+                last_pose = curr_pose
+                #
+                if m_confident == False:
+                    numMarkers = len(markers)
+                    if direction == -1 or (numMarkers > 0 and marker2d_list[0][0] > 2.0):
+                        await robot.drive_straight(distance_mm(direction * DISTANCE), speed_mmps(DISTANCE)).wait_for_completed()
+                        direction *= -1
+                        if direction == 1:
+                            await robot.turn_in_place(degrees(TURNING_ANGLE)).wait_for_completed()
                     else:
-                        await robot.turn_in_place(degrees(-165)).wait_for_completed()
-                        await robot.drive_straight(distance_mm(40), speed_mmps(40)).wait_for_completed()
+                        await robot.turn_in_place(degrees(TURNING_ANGLE)).wait_for_completed()
+            state = "MOVING"
+        elif state == "MOVING":
+        #
+            m_x, m_y, m_h, m_confident = compute_mean_pose(pf.particles)
+            #
+            region = "DOCKING" if m_x <= 13 else "WAREHOUSE"
+            x_goal, y_goal, h_goal = regionGoals[region]
+            x_diff, y_diff = x_goal * .95 - m_x, y_goal * .95 - m_y
+            tan = math.degrees(atan2(y_diff, x_diff))
+            rot = diff_heading_deg(tan, m_h)
+            await robot.turn_in_place(degrees(rot)).wait_for_completed()
 
-                await robot.set_lift_height(0).wait_for_completed()
-                await robot.go_to_pose(previousPose).wait_for_completed()
-                cube = None
-                timer = 1
-                numBoxesPlaced += 1
+            #Move toward goal
+            dist_to_goal = math.sqrt(y_diff**2 + x_diff**2) * 25
+            dist = 0.0
+            while dist < dist_to_goal:
+                min_dist = min(DISTANCE, dist_to_goal - dist)
+                await robot.drive_straight(distance_mm(min_dist), speed_mmps(40)).wait_for_completed()
+                dist = dist + min_dist
+            # Reoriented
+            await robot.turn_in_place(degrees(-1 * tan)).wait_for_completed()
+            reoriented_angle = 145 if region == "DOCKING" else 180
+            await robot.turn_in_place(degrees(reoriented_angle)).wait_for_completed()
+            cube = None
+            try:
+                cube = await robot.world.wait_for_observed_light_cube(timeout=1)
+            except:
+                print("Cube not found")
+                pass
+
 class CozmoThread(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self, daemon=False)

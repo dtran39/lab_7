@@ -1,5 +1,3 @@
-#Samuel Conrad and Josh Jibilian
-
 #!/usr/bin/env python3
 
 import cv2
@@ -20,7 +18,6 @@ from utils import *
 
 from cozmo.util import degrees, distance_mm, speed_mmps
 from math import atan2
-from cozmo.anim import Triggers
 
 # camera params
 camK = np.matrix([[295, 0, 160], [0, 295, 120], [0, 0, 1]], dtype='float32')
