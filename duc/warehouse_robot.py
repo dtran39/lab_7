@@ -119,7 +119,7 @@ class ParticleFilter:
         m_x, m_y, m_h, m_confident = compute_mean_pose(self.particles)
         return (m_x, m_y, m_h, m_confident)
 
-DISTANCE = 50
+DISTANCE = 30
 TURNING_ANGLE = 30
 async def run(robot: cozmo.robot.Robot):
     global last_pose
@@ -155,16 +155,15 @@ async def run(robot: cozmo.robot.Robot):
                 numMarkers = len(markers)
                 if direction == -1 or (numMarkers > 0 and marker2d_list[0][0] > 2.0):
                     await robot.drive_straight(distance_mm(direction * DISTANCE), speed_mmps(DISTANCE)).wait_for_completed()
-                    if direction == -1:
-                        await robot.turn_in_place(degrees(TURNING_ANGLE)).wait_for_completed()
                     direction *= -1
+                    if direction == 1:
+                        await robot.turn_in_place(degrees(TURNING_ANGLE)).wait_for_completed()
                 else:
                     await robot.turn_in_place(degrees(TURNING_ANGLE)).wait_for_completed()
         #
         m_x, m_y, m_h, m_confident = compute_mean_pose(pf.particles)
         #
         x, y, h, c = compute_mean_pose(pf.particles)
-
         if x > 13:
             isDockingRegion = False
             goal = 19,9,0

@@ -131,8 +131,6 @@ async def run(robot: cozmo.robot.Robot):
     robot.camera.image_stream_enabled = True
 
     #start particle filter
-    await robot.set_head_angle(degrees(0)).wait_for_completed()
-    await robot.set_lift_height(0).wait_for_completed()
     pf = ParticleFilter(grid)
 
     ############################################################################
