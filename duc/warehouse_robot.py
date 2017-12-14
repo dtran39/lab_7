@@ -120,7 +120,7 @@ class ParticleFilter:
         return (m_x, m_y, m_h, m_confident)
 
 DISTANCE = 30
-TURNING_ANGLE = 30
+TURNING_ANGLE = 50
 async def run(robot: cozmo.robot.Robot):
     global last_pose
     global grid, gui
@@ -164,6 +164,7 @@ async def run(robot: cozmo.robot.Robot):
         m_x, m_y, m_h, m_confident = compute_mean_pose(pf.particles)
         #
         x, y, h, c = compute_mean_pose(pf.particles)
+
         if x > 13:
             isDockingRegion = False
             goal = 19,9,0

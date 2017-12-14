@@ -1,5 +1,3 @@
-#Samuel Conrad and Josh Jibilian
-
 #!/usr/bin/env python3
 
 import cv2
@@ -11,16 +9,15 @@ import time
 
 from ar_markers.hamming.detect import detect_markers
 
+from math import atan2
 from grid import CozGrid
 from gui import GUIWindow
 from particle import Particle, Robot
 from setting import *
 from particle_filter import *
 from utils import *
-
 from cozmo.util import degrees, distance_mm, speed_mmps
-from math import atan2
-from cozmo.anim import Triggers
+
 
 # camera params
 camK = np.matrix([[295, 0, 160], [0, 295, 120], [0, 0, 1]], dtype='float32')
@@ -46,10 +43,10 @@ async def image_processing(robot):
 
     # convert camera image to opencv format
     opencv_image = np.asarray(event.image)
-    
+
     # detect markers
     markers = detect_markers(opencv_image, marker_size, camK)
-    
+
     # show markers
     for marker in markers:
         marker.highlite_marker(opencv_image, draw_frame=True, camK=camK)
@@ -61,9 +58,9 @@ async def image_processing(robot):
 
 #calculate marker pose
 def cvt_2Dmarker_measurements(ar_markers):
-    
+
     marker2d_list = []
-    
+
     for m in ar_markers:
         R_1_2, J = cv2.Rodrigues(m.rvec)
         R_1_1p = np.matrix([[0,0,1], [0,-1,0], [1,0,0]])
@@ -71,10 +68,10 @@ def cvt_2Dmarker_measurements(ar_markers):
         R_2p_1p = np.matmul(np.matmul(inv(R_2_2p), inv(R_1_2)), R_1_1p)
         #print('\n', R_2p_1p)
         yaw = -math.atan2(R_2p_1p[2,0], R_2p_1p[0,0])
-        
+
         x, y = m.tvec[2][0] + 0.5, -m.tvec[0][0]
         # print('x =', x, 'y =', y,'theta =', yaw)
-        
+
         # remove any duplate markers
         dup_thresh = 2.0
         find_dup = False
@@ -122,7 +119,8 @@ class ParticleFilter:
         m_x, m_y, m_h, m_confident = compute_mean_pose(self.particles)
         return (m_x, m_y, m_h, m_confident)
 
-
+DISTANCE = 30
+TURNING_ANGLE = 30
 async def run(robot: cozmo.robot.Robot):
     global last_pose
     global grid, gui
@@ -131,72 +129,41 @@ async def run(robot: cozmo.robot.Robot):
     robot.camera.image_stream_enabled = True
 
     #start particle filter
+    await robot.set_head_angle(degrees(0)).wait_for_completed()
+    await robot.set_lift_height(0).wait_for_completed()
     pf = ParticleFilter(grid)
 
     ############################################################################
     ######################### YOUR CODE HERE####################################
 
-    isFinished = False
-    moveVal = 1
+    ############################################################################
     while True:
-        pf = ParticleFilter(grid)
-
-        await robot.set_lift_height(0).wait_for_completed()
-        await robot.set_head_angle(degrees(5)).wait_for_completed()
-
-        #Obtain Odom Info
-        curr_pose = robot.pose
-        odom = compute_odometry(curr_pose)
-
-        #Obtain list of currently seen markers and their poses
-        markers = await image_processing(robot)
-        marker2d_list = cvt_2Dmarker_measurements(markers)
-
-        #Update particle filter
-        estimate = pf.update(odom, marker2d_list)
-
-        #Update particle filter gui
-        gui.show_particles(pf.particles)
-        gui.show_mean(estimate[0], estimate[1], estimate[2], estimate[3])
-        gui.updated.set()
-
-        while not estimate[3]:
-            await robot.set_lift_height(0).wait_for_completed()
-            await robot.set_head_angle(degrees(5)).wait_for_completed()
-
-            #Obtain Odom Info
+        direction = 1
+        m_confident = False
+        while m_confident == False:
             curr_pose = robot.pose
             odom = compute_odometry(curr_pose)
-
-            #Obtain list of currently seen markers and their poses
             markers = await image_processing(robot)
             marker2d_list = cvt_2Dmarker_measurements(markers)
-
-            #Update particle filter
-            estimate = pf.update(odom, marker2d_list)
-
-            #Update particle filter gui
+            m_x, m_y, m_h, m_confident = pf.update(odom, marker2d_list)
             gui.show_particles(pf.particles)
-            gui.show_mean(estimate[0], estimate[1], estimate[2], estimate[3])
+            gui.show_mean(m_x, m_y, m_h, m_confident)
             gui.updated.set()
-
             last_pose = curr_pose
-
-            if estimate[3]:
-                continue
-
-            numMarkers = len(markers)
-            if moveVal == -1 or (numMarkers > 0 and marker2d_list[0][0] > 2.0):
-                await robot.drive_straight(distance_mm(moveVal * 50), speed_mmps(50)).wait_for_completed()
-                if moveVal == -1:
-                    await robot.turn_in_place(degrees(30)).wait_for_completed()
-                moveVal *= -1
-            else:
-                await robot.turn_in_place(degrees(30)).wait_for_completed()
-
-        #Rotate toward goal
+            #
+            if m_confident == False:
+                numMarkers = len(markers)
+                if direction == -1 or (numMarkers > 0 and marker2d_list[0][0] > 2.0):
+                    await robot.drive_straight(distance_mm(direction * DISTANCE), speed_mmps(DISTANCE)).wait_for_completed()
+                    direction *= -1
+                    if direction == 1:
+                        await robot.turn_in_place(degrees(TURNING_ANGLE)).wait_for_completed()
+                else:
+                    await robot.turn_in_place(degrees(TURNING_ANGLE)).wait_for_completed()
+        #
+        m_x, m_y, m_h, m_confident = compute_mean_pose(pf.particles)
+        #
         x, y, h, c = compute_mean_pose(pf.particles)
-
         if x > 13:
             isDockingRegion = False
             goal = 19,9,0
@@ -272,11 +239,6 @@ async def run(robot: cozmo.robot.Robot):
                 cube = None
                 timer = 1
                 numBoxesPlaced += 1
-
-
-    ############################################################################
-
-
 class CozmoThread(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self, daemon=False)
